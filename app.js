@@ -2,10 +2,14 @@ const express = require('express');
 const app = express();
 const port = 3000;
 const uuid = require('uuid');
+const bcrypt = require('bcrypt');
 const { getRegisteredUsers } = require('./inMemoryUserRepository');
 
 // Variable globale pour stocker le token généré lors du login
 let authToken = null;
+
+// Variable globale pour stocker les utilisateurs authentifiés
+let authenticatedUsers = {};
 
 // Middleware firewall avec tableau d'URL non restreintes
 function firewall(req, res, next) {
@@ -13,7 +17,8 @@ function firewall(req, res, next) {
         '/url1',
         '/url2',
         '/login',
-        '/authenticate' // Ajouter la route d'authentification aux URL non restreintes
+        '/authenticate',
+        '/register' // Ajouter la route d'inscription aux URL non restreintes
     ];
 
     const requestedUrl = req.url;
@@ -39,6 +44,34 @@ function logHeaders(req, res, next) {
     next();
 }
 
+// Middleware pour vérifier les identifiants
+function checkCredentials(email, password) {
+    const users = getRegisteredUsers();
+    return users.find(user => user.email === email && user.password === password);
+}
+
+// Middleware pour inscrire un nouvel utilisateur
+function newUserRegistered(email, password) {
+    const users = getRegisteredUsers();
+
+    // Vérifier si l'utilisateur existe déjà
+    const existingUser = users.find(user => user.email === email);
+    if (existingUser) {
+        return false; // L'utilisateur existe déjà
+    }
+
+    // Hasher le mot de passe (à remplacer par une version sécurisée avec salt dans un environnement de production)
+    const hashedPassword = bcrypt.hashSync(password, 10);
+
+    // Ajouter le nouvel utilisateur
+    users.push({ email, password: hashedPassword });
+    return true; // Nouvel utilisateur ajouté avec succès
+}
+
+app.use(express.json()); // Middleware pour parser le corps des requêtes en JSON
+app.use(logHeaders); // Utiliser le middleware pour afficher les headers
+app.use(firewall); // Utiliser le middleware firewall
+
 // Endpoint /authenticate pour permettre à l'utilisateur de s'authentifier
 app.post('/authenticate', (req, res) => {
     const { email, password } = req.body;
@@ -60,32 +93,21 @@ app.post('/authenticate', (req, res) => {
     res.json({ token });
 });
 
-// Suite de votre code existant...
-
-app.use(express.json()); // Middleware pour parser le corps des requêtes en JSON
-app.use(logHeaders); // Utiliser le middleware pour afficher les headers
-app.use(firewall); // Utiliser le middleware firewall
-
-// Route POST /authenticate pour permettre à l'utilisateur de s'authentifier
-app.post('/authenticate', (req, res) => {
+// Endpoint /register pour permettre à l'utilisateur de s'inscrire
+app.post('/register', (req, res) => {
     const { email, password } = req.body;
 
-    // Vérifier si les identifiants sont valides
-    const user = checkCredentials(email, password);
-    if (!user) {
-        // Si les identifiants sont invalides, renvoyer une erreur 403
-        return res.status(403).send('Invalid email or password');
+    // Vérifier si l'utilisateur est déjà inscrit
+    const userRegistered = newUserRegistered(email, password);
+    if (!userRegistered) {
+        // Si l'utilisateur est déjà inscrit, renvoyer une erreur 409 (Conflict)
+        return res.status(409).send('User already registered');
     }
 
-    // Générer un UUID
-    const token = uuid.v4();
-
-    // Mettre à jour la variable globale authenticatedUsers avec le token et l'email de l'utilisateur
-    authenticatedUsers[token] = { email: user.email };
-
-    // Renvoyer le token au client
-    res.json({ token });
+    // Si l'inscription est réussie, renvoyer une confirmation
+    res.send('User registered successfully');
 });
+
 
 app.post('/login', (req, res) => {
     // Générer un token unique et renvoyer par cookie
