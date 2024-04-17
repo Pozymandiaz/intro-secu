@@ -1,6 +1,8 @@
 const express = require('express');
 const app = express();
 const port = 3000;
+const uuid = require('uuid');
+const { getRegisteredUsers } = require('./inMemoryUserRepository');
 
 // Variable globale pour stocker le token généré lors du login
 let authToken = null;
@@ -31,21 +33,58 @@ function firewall(req, res, next) {
     }
 }
 
+// Middleware pour afficher le contenu de request.headers à chaque requête entrante
+function logHeaders(req, res, next) {
+    console.log("Headers de la requête :", req.headers);
+    next();
+}
+
+// Endpoint /authenticate pour permettre à l'utilisateur de s'authentifier
+app.post('/authenticate', (req, res) => {
+    const { email, password } = req.body;
+
+    // Vérifier si les identifiants sont valides
+    const user = checkCredentials(email, password);
+    if (!user) {
+        // Si les identifiants sont invalides, renvoyer une erreur 403
+        return res.status(403).send('Invalid email or password');
+    }
+
+    // Générer un UUID
+    const token = uuid.v4();
+
+    // Mettre à jour la variable globale authToken avec le token de l'utilisateur
+    authToken = token;
+
+    // Renvoyer le token au client
+    res.json({ token });
+});
+
+// Suite de votre code existant...
+
 app.use(express.json()); // Middleware pour parser le corps des requêtes en JSON
+app.use(logHeaders); // Utiliser le middleware pour afficher les headers
 app.use(firewall); // Utiliser le middleware firewall
 
 // Route POST /authenticate pour permettre à l'utilisateur de s'authentifier
 app.post('/authenticate', (req, res) => {
     const { email, password } = req.body;
 
-    // Vérifier si l'email et le mot de passe sont fournis (validation minimale)
-    if (email && password) {
-        // Générer un token aléatoire (naïvement)
-        authToken = Math.random().toString(36).substring(7);
-        res.json({ token: authToken }); // Retourner le token au client
-    } else {
-        res.status(400).json({ message: 'Email et mot de passe requis' });
+    // Vérifier si les identifiants sont valides
+    const user = checkCredentials(email, password);
+    if (!user) {
+        // Si les identifiants sont invalides, renvoyer une erreur 403
+        return res.status(403).send('Invalid email or password');
     }
+
+    // Générer un UUID
+    const token = uuid.v4();
+
+    // Mettre à jour la variable globale authenticatedUsers avec le token et l'email de l'utilisateur
+    authenticatedUsers[token] = { email: user.email };
+
+    // Renvoyer le token au client
+    res.json({ token });
 });
 
 app.post('/login', (req, res) => {
