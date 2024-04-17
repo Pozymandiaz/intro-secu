@@ -45,6 +45,17 @@ app.get('/private/url1', (req, res) => {
     res.send('Hello it is secret')
 })
 
+app.get('/restricted2', (req, res) => {
+    const token = req.headers['token'];
+    if (token && token === '42') {
+        res.send('<h1>Admin space</h1>');
+    } else {
+        res.status(403).send();
+    }
+})
+
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
 })
+
+
